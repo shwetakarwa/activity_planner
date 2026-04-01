@@ -26,43 +26,33 @@
 
 ---
 
-# Milestone 2 — Live Claude API + Web Search + Weather
+# Milestone 2 — Parse Date & Location, Show on UI
 
 ## Setup
-- [ ] Create `.env` with `ANTHROPIC_API_KEY=...`
-- [ ] Add `dateparser` to `requirements.txt` (natural language date parsing: "this Sunday" → date)
-- [ ] Confirm web search is enabled for your org in the Anthropic Console (one-time admin step)
+- [x] Add `dateparser` to `requirements.txt`
 
-## Weather Tool (`tools/weather.py` + `tools/__init__.py`)
-- [ ] Create `tools/__init__.py` (empty, makes tools/ a package)
-- [ ] Geocode city → lat/lon via `https://geocoding-api.open-meteo.com/v1/search`
-- [ ] Fetch forecast via `https://api.open-meteo.com/v1/forecast` for the requested date
-- [ ] Return dict: `{date, temp_high_f, temp_low_f, condition, suitable_for_outdoor}`
-- [ ] Test: `tests/test_weather.py` — mock HTTP calls, verify output shape and F conversion
+## Date Parsing (`app.py`)
+- [x] Add `parse_date(availability_text) -> str | None` using `dateparser.parse()`; return `YYYY-MM-DD` or `None` if unparseable
 
-## Prompts (`prompts.py`)
-- [ ] `SYSTEM_PROMPT` — seasonal/timely priority order, output delimiter format (`---ACTIVITY---` / `---END---`), citation requirement
-- [ ] `build_user_message(inputs, today_date, requested_date)` — fills placeholders from `prompt.md`
-- [ ] `TOOLS` list — `web_search_20250305` (Anthropic server tool, no custom code) + `get_weather` schema
-- [ ] Test: `tests/test_prompts.py` — verify user message contains city, dates, and miles
+## Nearby Cities (`app.py`)
+- [x] Add `geocode_city(city) -> tuple[float, float]` — fetch lat/lon from `https://geocoding-api.open-meteo.com/v1/search`
+- [x] Add `find_nearby_cities(city, miles) -> list[str]` — call `geocode_city`, then query Overpass API with `around:meters,lat,lon`; return city names (include the entered city; deduplicate; cap at 5)
+  - Set `User-Agent` header on Overpass requests (required by their ToS)
 
-## Agentic Loop (`app.py`)
-> Note: `web_search_20250305` is a server-side tool — Anthropic handles search internally and
-> returns results as `web_search_tool_result` blocks. Our loop only needs to handle `get_weather`.
-> Use non-streaming `messages.create` per iteration (simpler than streaming mid-loop);
-> show `st.status()` spinners for UX feedback while waiting.
+## UI Confirmation (`app.py`)
+- [x] On Search click, call `parse_date()` and `find_nearby_cities()`
+- [x] If date parsed: render confirmation above results — `"Here are the events in {cities} on {weekday}, {Month} {day}."`
+- [x] If date cannot be parsed: show `st.warning("Couldn't understand the date — try 'this Sunday' or 'April 5'.")`
+- [x] Dummy cards still render below as before
 
-- [ ] `parse_date(availability_text)` — use `dateparser` to convert free text → `YYYY-MM-DD`
-- [ ] `run_search(inputs)` function:
-  - [ ] Build messages list with user message from `prompts.py`
-  - [ ] Loop: call `client.messages.create(tools=TOOLS, ...)`
-    - [ ] `stop_reason == "tool_use"` → find `get_weather` tool_use block → call `tools/weather.py` → append tool_result → continue
-    - [ ] `stop_reason == "end_turn"` → extract text → parse `---ACTIVITY---` blocks → return list of card dicts
-- [ ] Replace dummy cards with real cards from `run_search()`
-- [ ] Wrap call in `with st.status("Finding activities...")` to show progress
+## Tests (`tests/test_parse.py`)
+- [x] `test_parse_date_this_sunday` — "this Sunday" returns a valid ISO date string
+- [x] `test_parse_date_explicit` — "April 5" returns correct date
+- [x] `test_parse_date_invalid` — unrecognisable input returns `None`
+- [x] `test_find_nearby_cities_includes_entered_city` — entered city always appears in result
+- [x] `test_find_nearby_cities_deduplicates` — no duplicate names in result
 
 ## Done When
-- [ ] "San Carlos, 2 years, this Sunday, 10 miles" returns 5 real upcoming events
-- [ ] Activity titles include specific real dates and times
-- [ ] Weather note in descriptions reflects actual Open-Meteo forecast for that city/day
-- [ ] All new tests pass
+- [x] Submitting "San Carlos" + "this Sunday" + 10 miles shows "Here are the events in San Carlos, Redwood City, and Belmont on Sunday, April 5." above the dummy cards
+- [x] Submitting a garbled date shows a warning instead
+- [x] All new tests pass

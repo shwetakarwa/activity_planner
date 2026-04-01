@@ -1,5 +1,5 @@
-from app import parse_activities
 from prompts import build_user_message
+from search import parse_activities
 
 
 INPUTS = {

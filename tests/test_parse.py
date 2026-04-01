@@ -1,7 +1,8 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from app import find_nearby_cities, parse_date
+from app import parse_date
+from location import find_nearby_cities
 
 
 def test_parse_date_this_sunday():

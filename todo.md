@@ -56,3 +56,33 @@
 - [x] Submitting "San Carlos" + "this Sunday" + 10 miles shows "Here are the events in San Carlos, Redwood City, and Belmont on Sunday, April 5." above the dummy cards
 - [x] Submitting a garbled date shows a warning instead
 - [x] All new tests pass
+
+---
+
+# Milestone 3 — Find Activities via Claude Web Search
+
+## Prompts (`prompts.py`)
+- [ ] Create `prompts.py`
+- [ ] `SYSTEM_PROMPT`: TIMELY + AGE-APPROPRIATE prioritization criteria; `---ACTIVITY---`/`---END---` delimiters with fields EMOJI, TITLE, DESCRIPTION, LOCATION, DISTANCE, AGES, DURATION; rules (no invented events, cite sources)
+- [ ] `build_user_message(inputs, today_date, requested_date, cities) -> str` — format user message with pre-resolved cities list
+- [ ] `TOOLS`: list with only `web_search_20250305` (type, name, max_uses=8, user_location filled at runtime)
+
+## Agentic Loop (`app.py`)
+- [ ] Add `run_search(inputs, today_date, requested_date, cities)`:
+  - [ ] Build initial messages list and call `anthropic.messages.create` with `SYSTEM_PROMPT`, user message, `TOOLS`
+  - [ ] Handle `tool_use` stop_reason: extract `encrypted_content` from each search result, append `tool_result` block, continue loop
+  - [ ] Loop until `stop_reason == "end_turn"`
+  - [ ] Parse `---ACTIVITY---`/`---END---` blocks from final response text; return list of activity dicts
+- [ ] On Search click, pass `cities` from `st.session_state["nearby_cities"]` + resolved dates into `run_search`
+- [ ] Replace dummy cards with real parsed results
+- [ ] Wrap in `st.status()` spinner with label "Searching for events..."
+
+## Tests (`tests/test_prompts.py`)
+- [ ] `test_build_user_message_includes_cities` — cities list appears in the returned string
+- [ ] `test_build_user_message_includes_dates` — today_date and requested_date appear in the returned string
+- [ ] `test_parse_activities_basic` — correctly parses a single well-formed `---ACTIVITY---` block
+- [ ] `test_parse_activities_count` — parses exactly 5 blocks from a full Claude response
+
+## Done When
+- [ ] "San Carlos, 2 years, this Sunday, 10 miles" returns 5 real upcoming events across San Carlos, Redwood City, and Belmont with actual dates/times in titles
+- [ ] All new tests pass

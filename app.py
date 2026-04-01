@@ -4,9 +4,15 @@ import math
 import re
 from datetime import datetime
 
+import anthropic
 import dateparser
 import httpx
 import streamlit as st
+from dotenv import load_dotenv
+
+from prompts import SYSTEM_PROMPT, build_tools, build_user_message
+
+load_dotenv()
 
 st.set_page_config(page_title="Family Activity Finder", layout="wide")
 
@@ -80,7 +86,12 @@ def render_card(rank: int, activity: dict):
         with content_col:
             st.markdown(f"### {activity['emoji']} {activity['title']}")
             st.write(activity["description"])
-            st.caption(f"📍 {activity['location']} &nbsp;&nbsp; 🚗 {activity['distance']}")
+            if activity.get("ages"):
+                st.caption(f"👨‍👩‍👧 {activity['ages']}")
+            footer = f"📍 {activity['location']} &nbsp;&nbsp; 🚗 {activity['distance']}"
+            if activity.get("duration"):
+                footer += f" &nbsp;&nbsp; ⏱ {activity['duration']}"
+            st.caption(footer)
 
 
 def validate_inputs(city: str, ages: str, availability: str) -> list[str]:
@@ -95,7 +106,7 @@ def validate_inputs(city: str, ages: str, availability: str) -> list[str]:
 
 
 def clear_state():
-    for key in ["city", "ages", "availability", "miles", "prefs", "parsed_date", "nearby_cities"]:
+    for key in ["city", "ages", "availability", "miles", "prefs", "parsed_date", "nearby_cities", "activities"]:
         st.session_state.pop(key, None)
     st.session_state["searched"] = False
 
@@ -169,6 +180,58 @@ def format_city_list(cities: list[str]) -> str:
     return ", ".join(cities[:-1]) + f", and {cities[-1]}"
 
 
+def parse_activities(text: str) -> list[dict]:
+    blocks = re.findall(r"---ACTIVITY---(.*?)---END---", text, re.DOTALL)
+    activities = []
+    for block in blocks:
+        activity = {}
+        for m in re.finditer(r"^([A-Z]+):\s*(.*?)(?=\n[A-Z]+:|\Z)", block, re.MULTILINE | re.DOTALL):
+            activity[m.group(1).lower()] = m.group(2).strip()
+        if activity:
+            activities.append(activity)
+    return activities
+
+
+def run_search(
+    inputs: dict, today_date: str, requested_date: str, cities: list[str]
+) -> list[dict]:
+    client = anthropic.Anthropic()
+    tools = build_tools(inputs["city"])
+    user_msg = build_user_message(inputs, today_date, requested_date, cities)
+    messages = [{"role": "user", "content": user_msg}]
+
+    while True:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            tools=tools,
+            messages=messages,
+        )
+
+        if response.stop_reason == "end_turn":
+            break
+
+        if response.stop_reason == "tool_use":
+            messages.append({"role": "assistant", "content": response.content})
+            # For web_search_20250305, search results (including encrypted_content)
+            # are returned by Anthropic's servers in block.content — echo them back
+            # as tool_result so Claude can continue with additional searches.
+            tool_results = [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": block.content,
+                }
+                for block in response.content
+                if block.type == "tool_use"
+            ]
+            messages.append({"role": "user", "content": tool_results})
+
+    text = "".join(block.text for block in response.content if hasattr(block, "text"))
+    return parse_activities(text)
+
+
 # --- Page header ---
 st.title("🎯 Family Activity Finder")
 st.caption("Discover perfect activities for your family")
@@ -213,9 +276,30 @@ with form_col:
                 nearby = find_nearby_cities(city, miles)
             except Exception:
                 nearby = [city]
+
+            activities = None
+            if parsed:
+                now = datetime.now()
+                today_str = now.strftime("%A, %B") + f" {now.day}, {now.year}"
+                dt = datetime.strptime(parsed, "%Y-%m-%d")
+                requested_str = dt.strftime("%A, %B") + f" {dt.day}, {dt.year}"
+                inputs_dict = {
+                    "city": city,
+                    "ages": ages,
+                    "availability": availability,
+                    "miles": miles,
+                    "prefs": prefs,
+                }
+                with st.status("Searching for events...", expanded=True):
+                    try:
+                        activities = run_search(inputs_dict, today_str, requested_str, nearby)
+                    except Exception as e:
+                        st.error(f"Search failed: {e}")
+
             st.session_state["searched"] = True
             st.session_state["parsed_date"] = parsed
             st.session_state["nearby_cities"] = nearby
+            st.session_state["activities"] = activities
 
 with results_col:
     if st.session_state["searched"]:
@@ -229,9 +313,12 @@ with results_col:
         else:
             st.warning("Couldn't understand the date — try 'this Sunday' or 'April 5'.")
 
+        activities = st.session_state.get("activities")
+        display_activities = activities if activities else DUMMY_ACTIVITIES
+
         st.subheader("Top 5 Recommendations")
         st.caption("SORTED BY RELEVANCE")
-        for i, activity in enumerate(DUMMY_ACTIVITIES, start=1):
+        for i, activity in enumerate(display_activities, start=1):
             render_card(i, activity)
     else:
         st.info("Fill in your details and click **Search Activities** to find things to do.")

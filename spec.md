@@ -97,10 +97,10 @@ Parse the existing City, Date & Time Availability, and Max Distance fields to co
 ### Milestone 3 — Find Activities via Claude Web Search
 Replace dummy cards with real results using the Anthropic web search tool (no weather yet).
 
-- `prompts.py`: `SYSTEM_PROMPT` with activity prioritization and `---ACTIVITY---` / `---END---` delimiters; `build_user_message(inputs, today_date, requested_date)`; `TOOLS` list containing only `web_search_20250305`
-- `app.py`: `run_search(inputs)` agentic loop; loop until `end_turn`, parse activity blocks, replace dummy cards with real results; wrap in `st.status()` spinner
+- `prompts.py`: `SYSTEM_PROMPT` with activity prioritization and `---ACTIVITY---` / `---END---` delimiters; `build_user_message(inputs, today_date, requested_date, cities)`; `TOOLS` list containing only `web_search_20250305`
+- `app.py`: `run_search(inputs, today_date, requested_date, cities)` agentic loop; handle `tool_use` stop_reason for web search (pass back `encrypted_content` in `tool_result`); loop until `end_turn`, parse activity blocks, replace dummy cards with real results; wrap in `st.status()` spinner
 
-**Done when:** "San Carlos, 2 years, this Sunday, 10 miles" returns 5 real upcoming events with actual dates/times in titles.
+**Done when:** "San Carlos, 2 years, this Sunday, 10 miles" returns 5 real upcoming events across San Carlos, Redwood City, and Belmont with actual dates/times in titles.
 
 ---
 

@@ -7,7 +7,7 @@ import dateparser
 import streamlit as st
 from dotenv import load_dotenv
 
-from location import find_nearby_cities
+from location import find_nearby_cities, get_user_location
 from search import run_search
 
 load_dotenv()
@@ -106,8 +106,13 @@ with form_col:
                 st.error(msg)
         else:
             parsed = parse_date(availability)
+            user_ip = (st.context.ip_address or "").strip()
+            hint = get_user_location(user_ip)
             try:
-                nearby = find_nearby_cities(city, miles)
+                if hint:
+                    nearby = find_nearby_cities(city, miles, hint_lat=hint[0], hint_lon=hint[1])
+                else:
+                    nearby = find_nearby_cities(city, miles)
             except Exception:
                 nearby = [city]
 

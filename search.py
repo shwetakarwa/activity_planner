@@ -1,8 +1,24 @@
 from __future__ import annotations
 
 import re
+import time
 
 import anthropic
+
+_RETRY_DELAYS = [5, 10, 20]  # seconds between attempts 1→2, 2→3, 3→4
+
+
+def _create_with_retry(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Message:
+    """Call messages.create, retrying up to 3 times on 529 overloaded errors."""
+    for i, delay in enumerate([0] + _RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            return client.messages.create(**kwargs)
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and i < len(_RETRY_DELAYS):
+                continue
+            raise
 
 from cache import get_cached_events, make_cache_key, store_events
 from prompts import (
@@ -40,7 +56,7 @@ def _run_agentic_loop(
         kwargs["tools"] = tools
 
     while True:
-        response = client.messages.create(**kwargs)
+        response = _create_with_retry(client, **kwargs)
 
         if response.stop_reason == "end_turn":
             break

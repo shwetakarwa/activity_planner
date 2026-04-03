@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+import anthropic
 
-from search import gather_events, parse_activities, rank_events, run_search
+from search import _create_with_retry, gather_events, parse_activities, rank_events, run_search
 
 CITIES = ["San Carlos", "Redwood City"]
 AGES = "2 years"
@@ -96,3 +97,60 @@ def test_rank_events_no_tools():
 
     with patch("search._run_agentic_loop", side_effect=assert_no_tools):
         rank_events(RAW_EVENTS, INPUTS, REQUESTED)
+
+
+# --- _create_with_retry tests ---
+
+def _make_529():
+    err = anthropic.APIStatusError.__new__(anthropic.APIStatusError)
+    err.status_code = 529
+    err.message = "overloaded"
+    err.body = {}
+    err.response = MagicMock(status_code=529)
+    return err
+
+
+def _make_500():
+    err = anthropic.APIStatusError.__new__(anthropic.APIStatusError)
+    err.status_code = 500
+    err.message = "server error"
+    err.body = {}
+    err.response = MagicMock(status_code=500)
+    return err
+
+
+def test_retries_on_529_then_succeeds():
+    success = MagicMock()
+    client = MagicMock()
+    client.messages.create.side_effect = [_make_529(), success]
+
+    with patch("search.time.sleep") as mock_sleep:
+        result = _create_with_retry(client, model="x", messages=[])
+
+    assert result is success
+    mock_sleep.assert_called_once()  # slept once between attempt 1 and 2
+
+
+def test_raises_after_exhausting_retries():
+    client = MagicMock()
+    client.messages.create.side_effect = [_make_529()] * 4  # 1 initial + 3 retries
+
+    with patch("search.time.sleep"):
+        with pytest.raises(anthropic.APIStatusError) as exc_info:
+            _create_with_retry(client, model="x", messages=[])
+
+    assert exc_info.value.status_code == 529
+    assert client.messages.create.call_count == 4
+
+
+def test_does_not_retry_on_other_status_codes():
+    client = MagicMock()
+    client.messages.create.side_effect = _make_500()
+
+    with patch("search.time.sleep") as mock_sleep:
+        with pytest.raises(anthropic.APIStatusError) as exc_info:
+            _create_with_retry(client, model="x", messages=[])
+
+    assert exc_info.value.status_code == 500
+    mock_sleep.assert_not_called()
+    assert client.messages.create.call_count == 1

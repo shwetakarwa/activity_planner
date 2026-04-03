@@ -1,4 +1,4 @@
-from prompts import build_user_message
+from prompts import build_gather_message, build_rank_message
 from search import parse_activities
 
 
@@ -14,17 +14,28 @@ TODAY = "Monday, March 30, 2026"
 REQUESTED = "Sunday, April 5, 2026"
 
 
-def test_build_user_message_includes_cities():
-    msg = build_user_message(INPUTS, TODAY, REQUESTED, CITIES)
+def test_build_gather_message_includes_cities():
+    msg = build_gather_message(CITIES, INPUTS["ages"], TODAY, REQUESTED)
     assert "San Carlos" in msg
     assert "Redwood City" in msg
     assert "Belmont" in msg
 
 
-def test_build_user_message_includes_dates():
-    msg = build_user_message(INPUTS, TODAY, REQUESTED, CITIES)
+def test_build_gather_message_includes_dates():
+    msg = build_gather_message(CITIES, INPUTS["ages"], TODAY, REQUESTED)
     assert TODAY in msg
     assert REQUESTED in msg
+
+
+def test_build_rank_message_includes_prefs():
+    inputs_with_prefs = {**INPUTS, "prefs": "indoor"}
+    msg = build_rank_message("some events", inputs_with_prefs, REQUESTED)
+    assert "indoor" in msg
+
+
+def test_build_rank_message_defaults_empty_prefs():
+    msg = build_rank_message("some events", INPUTS, REQUESTED)
+    assert "No specific preferences" in msg
 
 
 SINGLE_BLOCK = """

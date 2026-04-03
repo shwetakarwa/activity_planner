@@ -7,6 +7,7 @@ import dateparser
 import streamlit as st
 from dotenv import load_dotenv
 
+import cache
 from location import find_nearby_cities, get_user_location
 from search import run_search
 
@@ -73,6 +74,7 @@ st.divider()
 
 if "searched" not in st.session_state:
     st.session_state["searched"] = False
+    cache.purge_old_entries()
 
 # --- Two-column layout ---
 form_col, results_col = st.columns([1, 2])
@@ -129,9 +131,13 @@ with form_col:
                     "miles": miles,
                     "prefs": prefs,
                 }
-                with st.status("Searching for events...", expanded=True):
+                with st.status("Searching for events...", expanded=True) as status:
                     try:
-                        activities = run_search(inputs_dict, today_str, requested_str, nearby)
+                        activities, from_cache = run_search(
+                            inputs_dict, today_str, requested_str, nearby, parsed
+                        )
+                        if from_cache:
+                            status.update(label="Ranking activities (from cache).")
                     except Exception as e:
                         st.error(f"Search failed: {e}")
 

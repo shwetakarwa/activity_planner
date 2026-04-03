@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-_DB_PATH = Path(__file__).parent / ".activity_cache.db"
+_DB_PATH = Path("/tmp") / ".activity_cache.db"
 
 
 def _connect() -> sqlite3.Connection:
